@@ -1,0 +1,223 @@
+---
+título : " Coursera Practical Machine Learning "
+autor : " Daniel Sammarco "
+data : " 11 de dezembro de 2020 "
+output : html_document
+---
+
+#  Visão geral
+
+Este documento é o relatório final do projeto Peer Assessment do curso Practical Machine Learning do Coursera, no âmbito da Especialização em Data Science. Foi construído em RStudio, usando suas funções knitr, para ser publicado em formato html. Essa análise pretendia ser a base para o questionário do curso e uma redação do trabalho de previsão. O objetivo principal do projeto é prever a maneira como 6 participantes realizaram algum exercício, conforme descrito abaixo. Esta é a variável “classe” no conjunto de treinamento. O algoritmo de aprendizado de máquina descrito aqui é aplicado aos 20 casos de teste disponíveis nos dados de teste.
+
+#  Fundo
+
+Usando dispositivos como Jawbone Up, Nike FuelBand e Fitbit, agora é possível coletar uma grande quantidade de dados sobre atividades pessoais de forma relativamente barata. Esses tipos de dispositivos fazem parte do automovimento quantificado - um grupo de entusiastas que medem regularmente sobre si mesmos para melhorar sua saúde, encontrar padrões em seu comportamento ou porque são geeks de tecnologia. Uma coisa que as pessoas fazem regularmente é quantificar quanto de uma determinada atividade fazem, mas raramente quantificam quão bem a realizam. Neste projeto, seu objetivo será usar dados de acelerômetros na cintura, antebraço, braço e haltere de 6 participantes. Eles foram solicitados a realizar levantamentos com barra correta e incorretamente de 5 maneiras diferentes. Mais informações estão disponíveis no site aqui: [http://groupware.les.inf.puc-rio.br/har]http://groupware.les.
+
+#  Carregamento de dados e análise exploratória
+
+##  Fonte de dados
+
+Os dados de treinamento para este projeto estão disponíveis aqui:
+
+[Conjunto de treinamento] https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+Os dados do teste estão disponíveis aqui:
+
+[Test Set] https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+
+##  Configuração do ambiente
+
+
+`` `{r, cache = TRUE, mensagem = FALSE}
+biblioteca ( knitr )
+biblioteca ( circunflexo )
+biblioteca ( rpart )
+biblioteca ( rpart.plot )
+biblioteca ( chocalho )
+biblioteca ( randomForest )
+biblioteca ( corrplot )
+set.seed ( 301 )
+`` `
+
+
+##  Carregamento e limpeza de dados
+
+A próxima etapa é carregar o conjunto de dados do URL fornecido acima. O conjunto de dados de treinamento é então dividido em 2 para criar um conjunto de treinamento (70% dos dados) para o processo de modelagem e um conjunto de teste (com os 30% restantes) para as validações. O conjunto de dados de teste não é alterado e será usado apenas para a geração de resultados do questionário.
+
+`` `{r, cache = TRUE, mensagem = FALSE}
+TrainUrl  <-  " https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv "
+TestUrl   <-  " https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv "
+TrainFile <- " pml-traininig.csv "
+TestFile <- " pml-testing.csv "
+# baixar os conjuntos de dados
+if ( ! file.exists ( TrainFile ))
+{
+    download.file ( TrainUrl , destfile  =  TrainFile )
+}
+treinamento  <- read.csv ( TrainFile )
+if ( ! file.exists ( TestFile ))
+{
+    download.file ( TestUrl , destfile  =  TestFile )
+}
+testando   <- read.csv ( TestFile )
+# criar uma partição usando acento circunflexo com o conjunto de dados de treinamento na proporção 70,30
+inTrain   <- createDataPartition ( training $ classe , p = 0,7 , list = FALSE )
+TrainSet  <-  treinamento [ inTrain ,]
+TestSet   <-  treinamento [ - inTrain ,]
+escurecer ( TrainSet )
+dim ( TestSet )
+`` `
+
+Ambos os conjuntos de dados criados têm 160 variáveis. Vamos limpar as variáveis ​​NA, variância The Near Zero (NZV) e as variáveis ​​de ID também.
+
+###  Remover variáveis ​​com variação quase zero
+
+`` `{r, cache = TRUE, mensagem = FALSE}
+NZV  <- nearZeroVar ( composição )
+TrainSet  <-  TrainSet [, - NZV ]
+TestSet   <-  TestSet [, - NZV ]
+escurecer ( TrainSet )
+dim ( TestSet )
+`` `
+
+###  Remova as variáveis ​​que são principalmente NA
+
+`` `{r, cache = TRUE, mensagem = FALSE}
+AllNA     <- sapply ( composição , função ( x ) média (is.na ( x ))) >  0,95
+TrainSet  <-  TrainSet [, AllNA == FALSE ]
+TestSet   <-  TestSet [, AllNA == FALSE ]
+dim ( TestSet )
+escurecer ( TrainSet )
+`` `
+
+###  Remover variáveis ​​de identificação apenas (colunas 1 a 5)
+
+
+`` `{r, cache = TRUE, mensagem = FALSE}
+TrainSet  <-  TrainSet [, - ( 1 : 5 )]
+TestSet   <-  TestSet [, - ( 1 : 5 )]
+escurecer ( TrainSet )
+dim ( TestSet )
+`` `
+
+
+Após a limpeza, podemos ver que o número de variáveis ​​para análise agora é de apenas 54.
+
+
+#  Análise
+
+Uma correlação entre as variáveis ​​é analisada antes de prosseguir para os procedimentos de modelagem.
+
+
+`` `{r, cache = TRUE, mensagem = FALSE}
+corMatrix  <- cor ( TrainSet [, - 54 ])
+corrplot ( corMatrix , order  =  " FPC " , method  =  " shadow " , type  =  " lower " ,
+         tl.cex  =  0,5 , tl.col  = rgb ( 0 , 0 , 0 ))
+`` `
+
+As variáveis ​​altamente correlacionadas são mostradas em cores escuras no gráfico acima. Para fazer uma análise ainda mais compacta, uma PCA (Análise de Componentes Principais) pode ser realizada como etapa de pré-processamento dos conjuntos de dados. No entanto, como as correlações são poucas, esta etapa não será aplicada para esta tarefa.
+
+#  Construção de modelo de previsão
+
+Três métodos populares serão aplicados para modelar as regressões (no conjunto de dados Train) e o melhor (com maior precisão quando aplicado ao conjunto de dados Teste) será usado para as previsões do questionário. Os métodos são: Florestas Aleatórias, Árvore de Decisão e Modelo Generalizado Boosted, conforme descrito a seguir. Uma matriz de confusão é plotada no final de cada análise para melhor visualizar a precisão dos modelos.
+
+_ Florestas Aleatórias _
+
+###  Model Fit
+
+`` `{r, cache = TRUE, mensagem = FALSE}
+set.seed ( 301 )
+controlRF  <- trainControl ( method = " cv " , number = 3 , verboseIter = FALSE )
+modFitRandForest  <- train ( classe  ~  . , data = TrainSet , method = " rf " ,
+                          trControl = controlRF )
+modFitRandForest $ finalModel
+`` `
+
+###  Predição no conjunto de dados de teste
+
+
+`` `{r, cache = TRUE, mensagem = FALSE}
+PredictRandForest  <- Predict ( modFitRandForest , newdata = TestSet )
+confMatRandForest  <- confusedMatrix ( predictRandForest , TestSet $ classe )
+confMatRandForest
+`` `
+
+###  Resultados da matriz do gráfico
+
+`` `{r, cache = TRUE, mensagem = FALSE}
+plot ( confMatRandForest $ table , col  =  confMatRandForest $ byClass ,
+     main  = paste ( " Random Forest - Accuracy = " ,
+                  rodada ( confMatRandForest $ global [ ' Precisão ' ], 4 )))
+`` `
+
+_ Árvore de Decisão _
+
+###  Model Fit
+
+`` `{r, cache = TRUE, mensagem = FALSE}
+set.seed ( 301 )
+modFitDecTree  <- rpart ( classe  ~  . , data = TrainSet , method = " class " )
+fancyRpartPlot ( modFitDecTree )
+`` `
+
+###  Predição no conjunto de dados de teste
+
+
+`` `{r, cache = TRUE, mensagem = FALSE}
+PredictDecTree  <- Predict ( modFitDecTree , newdata = TestSet , type = " classe " )
+confMatDecTree  <- confusedMatrix ( predictDecTree , TestSet $ classe )
+confMatDecTree
+`` `
+
+###  Resultados da matriz do gráfico
+
+`` `{r, cache = TRUE, mensagem = FALSE}
+plot ( confMatDecTree $ table , col  =  confMatDecTree $ byClass ,
+     main  = paste ( " Árvore de Decisão - Precisão = " ,
+                  rodada ( confMatDecTree $ global [ ' Precisão ' ], 4 )))
+`` `
+
+_ Modelo Generalizado Boosted (GBM) _
+
+###  Model Fit
+
+`` `{r, cache = TRUE, mensagem = FALSE}
+set.seed ( 301 )
+controlGBM  <- trainControl ( método  =  " repeatedcv " , número  =  5 , repete  =  1 )
+modFitGBM   <- train ( classe  ~  . , data = TrainSet , method  =  " gbm " ,
+                    trControl  =  controlGBM , verbose  =  FALSE )
+modFitGBM $ finalModel
+`` `
+
+###  Predição no conjunto de dados de teste
+
+
+`` `{r, cache = TRUE, mensagem = FALSE}
+PredictGBM  <- Predict ( modFitGBM , newdata = TestSet )
+confMatGBM  <- confusedMatrix ( predictGBM , TestSet $ classe )
+confMatGBM
+`` `
+
+###  Resultados da matriz do gráfico
+
+`` `{r, cache = TRUE, mensagem = FALSE}
+plot ( tabela confMatGBM $ , col = confMatGBM $ byClass ,  
+     main  = paste ( " GBM - Accuracy = " , round ( confMatGBM $ global [ ' Precisão ' ], 4 )))
+`` `
+
+#  Aplicando o modelo selecionado aos dados de teste
+
+A precisão dos 3 métodos de modelagem de regressão acima são:
+
+- Floresta Aleatória: 99,68%
+- Árvore de Decisão: 82,92%
+- GBM: 98,84%
+
+
+Nesse caso, o modelo Random Forest será aplicado para prever os 20 resultados do questionário (conjunto de dados de teste) conforme mostrado abaixo.
+
+`` `{r, cache = TRUE, mensagem = FALSE}
+PredictTEST  <- Predict ( modFitRandForest , newdata = testando )
+PredictTEST
+`` `
